@@ -28,6 +28,7 @@ classdef iioSDR < matlab.System
        radioDev % Handle to radio object
        inputStruct
        XOCorrectionValue = 0;
+       DCXOCorrectionValue = 0;
        RadioSetup = false;
     end
     
@@ -82,7 +83,11 @@ classdef iioSDR < matlab.System
             input{obj.radioDev.getInChannel('TX_SAMPLING_FREQ')} = obj.SampleRate;
             input{obj.radioDev.getInChannel('TX_RF_BANDWIDTH')} = obj.RFBandwidth;
             input{obj.radioDev.getInChannel('TX_RF_ATTENUATION')} = obj.TXAttenuation;
-            input{obj.radioDev.getInChannel('XO_CORRECTION')} = 40e6+obj.XOCorrectionValue;
+            if strcmp(obj.dev_name,'fmcomms3')
+                input{obj.radioDev.getInChannel('DCXO_FINE_TUNE')} = 5765+obj.DCXOCorrectionValue;            
+            else
+                input{obj.radioDev.getInChannel('XO_CORRECTION')} = 40e6+obj.XOCorrectionValue;
+            end
             % Save to class
             obj.inputStruct = input;
         end
@@ -295,6 +300,7 @@ classdef iioSDR < matlab.System
                 obj.Setup(length(txWaveform)*4);                
             end
 
+            DCXOOffset = 0;
             
             %% Update XO to force tone to specific frequency
             fprintf(['-------------------------\n',...
@@ -335,16 +341,21 @@ classdef iioSDR < matlab.System
                     disp('Frequency offset within tolerance, calibration complete');
                     break;
                 end
-                XOOffset = XOOffset - round(update);
-                disp(['XO Update Prescale: ',num2str(round(update))]);
                 % From new XO calculate actual center frequency and sample rate
                 %f_s = XOOffset*MULT_fs;
                 %binRez = f_s/fftSize;
                 
-                % Update XO parameter in SDR
-                obj.XOCorrectionValue = XOOffset;
-                %obj.UpdateInputStructField('XO_CORRECTION',40e6 + XOOffset);
-                
+                if strcmp(obj.dev_name,'fmcomms3')
+                    DCXOOffset = DCXOOffset - sign(update);
+                    disp(['DCXO Update : ',num2str(DCXOOffset)]);
+                    obj.DCXOCorrectionValue = DCXOOffset;
+                else
+                    XOOffset = XOOffset - round(update);
+                    disp(['XO Update Prescale: ',num2str(round(update))]);
+                    % Update XO parameter in SDR
+                    obj.XOCorrectionValue = XOOffset;
+                    %obj.UpdateInputStructField('XO_CORRECTION',40e6 + XOOffset);
+                end
             end
             % Save correction value
             obj.XOCorrectionValue = XOOffset;
